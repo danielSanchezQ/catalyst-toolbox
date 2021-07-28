@@ -1,7 +1,7 @@
 mod fetch;
-mod models;
+pub mod models;
 
-use crate::ideascale::models::de::{Challenge, Fund, Funnel, Proposal, Stage};
+use crate::ideascale::models::de::{Challenge, Fund, Funnel, Proposal};
 use crate::ideascale::models::Scores;
 
 use std::collections::HashMap;
@@ -26,14 +26,9 @@ pub struct IdeaScaleData {
     pub fund: Fund,
     pub challenges: HashMap<u32, Challenge>,
     pub proposals: HashMap<u32, Proposal>,
-    pub scores: Scores,
 }
 
-pub async fn fetch_all(
-    fund: usize,
-    stage_label: &str,
-    api_token: String,
-) -> Result<IdeaScaleData, Error> {
+pub async fn fetch_all(fund: usize, api_token: String) -> Result<IdeaScaleData, Error> {
     let funnels_task = tokio::spawn(fetch::get_funnels_data_for_fund(api_token.clone()));
     let funds_task = tokio::spawn(fetch::get_funds_data(api_token.clone()));
     let funnels = funnels_task
@@ -63,26 +58,6 @@ pub async fn fetch_all(
         .filter(|p| filter_proposal_by_stage_type(&p.stage_type))
         .collect();
 
-    let mut stages: Vec<_> = fetch::get_stages(api_token.clone()).await?;
-    stages.retain(|stage| filter_stages(stage, stage_label, &funnels));
-
-    let scores_tasks: Vec<_> = stages
-        .iter()
-        .map(|stage| {
-            tokio::spawn(fetch::get_assessments_score(
-                stage.assessment_id,
-                api_token.clone(),
-            ))
-        })
-        .collect();
-
-    let scores: Scores = futures::future::try_join_all(scores_tasks)
-        .await?
-        .into_iter()
-        .flatten()
-        .flatten()
-        .collect();
-
     Ok(IdeaScaleData {
         funnels,
         fund: funds
@@ -91,7 +66,6 @@ pub async fn fetch_all(
             .unwrap_or_else(|| panic!("Selected fund {}, wasn't among the available funds", fund)),
         challenges: challenges.into_iter().map(|c| (c.id, c)).collect(),
         proposals: proposals.into_iter().map(|p| (p.proposal_id, p)).collect(),
-        scores,
     })
 }
 
@@ -141,8 +115,8 @@ pub fn build_proposals(
     chain_vote_type: &str,
     fund: usize,
     tags: &CustomFieldTags,
+    scores: &Scores,
 ) -> Vec<models::se::Proposal> {
-    let scores = &ideascale_data.scores;
     ideascale_data
         .proposals
         .values()
@@ -207,10 +181,6 @@ pub fn build_proposals(
 
 fn filter_proposal_by_stage_type(stage: &str) -> bool {
     matches!(stage, "Governance phase" | "Assess QA")
-}
-
-fn filter_stages(stage: &Stage, stage_label: &str, funnel_ids: &HashMap<u32, Funnel>) -> bool {
-    stage.label.to_ascii_lowercase() == stage_label && funnel_ids.contains_key(&stage.funnel_id)
 }
 
 fn get_from_extra_fields(fields: &serde_json::Value, tag: &str) -> Option<String> {

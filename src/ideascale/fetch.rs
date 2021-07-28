@@ -1,5 +1,4 @@
-use crate::ideascale::models::de::{Fund, Funnel, Proposal, Stage};
-use crate::ideascale::models::Scores;
+use crate::ideascale::models::de::{Fund, Funnel, Proposal};
 
 use once_cell::sync::Lazy;
 use serde::de::DeserializeOwned;
@@ -50,21 +49,6 @@ pub async fn get_funds_data(api_token: String) -> Result<Vec<Fund>, Error> {
         BASE_IDEASCALE_URL.join("campaigns/groups").unwrap(),
     )
     .await
-}
-
-pub async fn get_stages(api_token: String) -> Result<Vec<Stage>, Error> {
-    request_data(api_token, BASE_IDEASCALE_URL.join("stages").unwrap()).await
-}
-
-pub async fn get_assessments_score(assessment_id: u32, api_token: String) -> Result<Scores, Error> {
-    let scores: Vec<Score> = request_data(
-        api_token,
-        BASE_IDEASCALE_URL
-            .join(&format!("assessment/{}/results", assessment_id))
-            .unwrap(),
-    )
-    .await?;
-    Ok(scores.into_iter().map(|s| (s.id, s.score)).collect())
 }
 
 pub async fn get_proposals_data(
