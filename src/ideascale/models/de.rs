@@ -139,6 +139,7 @@ fn deserialize_clean_string<'de, D: Deserializer<'de>>(
     rewards_str.retain(|c| !matches!(c, '*' | '-' | '/'));
     Ok(rewards_str)
 }
+
 fn deserialize_clean_challenge_title<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<String, D::Error> {

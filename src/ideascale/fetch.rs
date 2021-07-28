@@ -1,11 +1,11 @@
 use crate::ideascale::models::de::{Fund, Funnel, Proposal, Stage};
+use crate::ideascale::models::Scores;
 
 use once_cell::sync::Lazy;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use url::Url;
 
-use std::collections::HashMap;
 use std::convert::TryInto;
 
 #[derive(thiserror::Error, Debug)]
@@ -24,8 +24,6 @@ struct Score {
     #[serde(alias = "avgScoreOfIdea")]
     score: f32,
 }
-
-pub type Scores = HashMap<u32, f32>;
 
 static BASE_IDEASCALE_URL: Lazy<url::Url> = Lazy::new(|| {
     "https://cardano.ideascale.com/a/rest/v1/"

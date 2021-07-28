@@ -1,8 +1,8 @@
 mod fetch;
 mod models;
 
-use crate::ideascale::fetch::Scores;
 use crate::ideascale::models::de::{Challenge, Fund, Funnel, Proposal, Stage};
+use crate::ideascale::models::Scores;
 
 use std::collections::HashMap;
 
