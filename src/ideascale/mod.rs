@@ -2,7 +2,9 @@ mod fetch;
 mod models;
 
 use crate::ideascale::fetch::Scores;
-use crate::ideascale::models::de::{clean_str, Challenge, Fund, Funnel, Proposal, Stage};
+use crate::ideascale::models::de::{
+    clean_str, Challenge, Fund, Funnel, Proposal, ProposalCustomFieldsByKey, Stage,
+};
 
 use std::collections::HashMap;
 
@@ -54,15 +56,17 @@ pub async fn fetch_all(
         .map(|c| tokio::spawn(fetch::get_proposals_data(c.id, api_token.clone())))
         .collect();
 
-    let proposals = futures::future::try_join_all(proposals_tasks)
-        .await?
-        .into_iter()
-        // forcefully unwrap to pop errors directly
-        // TODO: Handle error better here
-        .map(Result::unwrap)
-        .flatten()
-        // filter out non approved or staged proposals
-        .filter(|p| p.approved && filter_proposal_by_stage_type(&p.stage_type));
+    let proposals: Vec<Proposal> = {
+        let mut proposals = Vec::new();
+        for proposal_result in futures::future::try_join_all(proposals_tasks).await? {
+            proposals.extend(
+                proposal_result?
+                    .into_iter()
+                    .filter(|p| filter_proposal_by_stage_type(&p.stage_type) && p.approved),
+            );
+        }
+        proposals
+    };
 
     let mut stages: Vec<_> = fetch::get_stages(api_token.clone()).await?;
     stages.retain(|stage| filter_stages(stage, stage_label, &funnels));
@@ -91,7 +95,7 @@ pub async fn fetch_all(
             .find(|f| f.name.as_ref().contains(&format!("Fund{}", fund)))
             .unwrap_or_else(|| panic!("Selected fund {}, wasn't among the available funds", fund)),
         challenges: challenges.into_iter().map(|c| (c.id, c)).collect(),
-        proposals: proposals.map(|p| (p.proposal_id, p)).collect(),
+        proposals: proposals.into_iter().map(|p| (p.proposal_id, p)).collect(),
         scores,
     })
 }
@@ -161,11 +165,8 @@ pub fn build_proposals(
                 chain_vote_type: chain_vote_type.to_string(),
                 internal_id: i.to_string(),
                 // this may change to an integer type in the future, would have to get from json value as so
-                proposal_funds: get_from_extra_fields(
-                    &p.custom_fields.fields,
-                    &tags.proposal_funds,
-                )
-                .unwrap_or_default(),
+                proposal_funds: get_from_extra_fields(&p.custom_fields, &tags.proposal_funds)
+                    .unwrap_or_default(),
                 proposal_id: p.proposal_id.to_string(),
                 proposal_impact_score: scores
                     .get(&p.proposal_id)
@@ -180,31 +181,22 @@ pub fn build_proposals(
                 proposer_email: p.proposer.contact.clone(),
                 proposer_name: p.proposer.name.clone(),
                 proposer_relevant_experience: get_from_extra_fields(
-                    &p.custom_fields.fields,
+                    &p.custom_fields,
                     &tags.proposal_relevant_experience,
                 )
                 .map(|s| clean_str(&s))
                 .unwrap_or_default(),
-                proposer_url: get_from_extra_fields(&p.custom_fields.fields, &tags.proposer_url)
+                proposer_url: get_from_extra_fields(&p.custom_fields, &tags.proposer_url)
                     .unwrap_or_default(),
-                proposal_solution: get_from_extra_fields(
-                    &p.custom_fields.fields,
-                    &tags.proposal_solution,
-                ),
-                proposal_brief: get_from_extra_fields(
-                    &p.custom_fields.fields,
-                    &tags.proposal_brief,
-                ),
+                proposal_solution: get_from_extra_fields(&p.custom_fields, &tags.proposal_solution),
+                proposal_brief: get_from_extra_fields(&p.custom_fields, &tags.proposal_brief),
                 proposal_importance: get_from_extra_fields(
-                    &p.custom_fields.fields,
+                    &p.custom_fields,
                     &tags.proposal_importance,
                 )
                 .map(|s| clean_str(&s)),
-                proposal_goal: get_from_extra_fields(&p.custom_fields.fields, &tags.proposal_goal),
-                proposal_metrics: get_from_extra_fields(
-                    &p.custom_fields.fields,
-                    &tags.proposal_metrics,
-                ),
+                proposal_goal: get_from_extra_fields(&p.custom_fields, &tags.proposal_goal),
+                proposal_metrics: get_from_extra_fields(&p.custom_fields, &tags.proposal_metrics),
             }
         })
         .collect()
@@ -218,8 +210,10 @@ fn filter_stages(stage: &Stage, stage_label: &str, funnel_ids: &HashMap<u32, Fun
     stage.label.to_ascii_lowercase() == stage_label && funnel_ids.contains_key(&stage.funnel_id)
 }
 
-fn get_from_extra_fields(fields: &serde_json::Value, tag: &str) -> Option<String> {
+fn get_from_extra_fields(fields: &Option<ProposalCustomFieldsByKey>, tag: &str) -> Option<String> {
     fields
+        .as_ref()
+        .map(|f| &f.fields)?
         .get(tag)
         .and_then(|value| value.as_str())
         .map(ToString::to_string)
