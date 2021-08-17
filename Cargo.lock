@@ -328,6 +328,7 @@ dependencies = [
  "fixed",
  "futures",
  "hex",
+ "http",
  "image",
  "jcli",
  "jormungandr-lib",
