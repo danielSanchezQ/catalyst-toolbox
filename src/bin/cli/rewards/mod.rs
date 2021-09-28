@@ -1,4 +1,3 @@
-mod ca;
 mod voters;
 
 use structopt::StructOpt;
