@@ -1,4 +1,4 @@
-from typing import Dict, Optional, List, Tuple, Generator, TextIO, Union
+from typing import Dict, Optional, List, Tuple, Generator, TextIO, Union, Set
 
 import sys
 import asyncio
@@ -162,6 +162,11 @@ def get_proposals_voteplans_and_challenges_from_files(
     return proposals, voteplan_proposals, challeges
 
 
+def get_excluded_proposals_from_file(excluded_proposals_path: str) -> List[str]:
+    with open(excluded_proposals_path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 # API loaders
 
 
@@ -194,7 +199,7 @@ async def get_challenges_from_api(vit_servicing_station_url: str) -> List[Challe
 
 async def get_proposals_voteplans_and_challenges_from_api(
     vit_servicing_station_url: str,
-) -> Tuple[Dict[str, Proposal], Dict[str, ProposalStatus]]:
+) -> Tuple[Dict[str, Proposal], Dict[str, ProposalStatus], Dict[str, Challenge]]:
     proposals_task = asyncio.create_task(
         get_proposals_from_api(vit_servicing_station_url)
     )
@@ -365,6 +370,10 @@ def filter_data_by_challenge(
     }
     return proposals, voteplans
 
+def filter_excluded_proposals(proposals: Dict[str, Proposal], excluded: Set[str]) -> Dict[str, Proposal]:
+    return {
+        k: v for k, v in proposals.values() if all(_id not in excluded for _id in (k, v.chain_proposal_id))
+    }
 
 # Output results
 
@@ -432,6 +441,14 @@ def calculate_rewards(
         proposals, voteplan_proposals, challenges = asyncio.run(
             get_proposals_voteplans_and_challenges_from_api(vit_station_url)
         )
+
+    excluded_proposals: Set[str] = (
+        set(get_excluded_proposals_from_file(excluded_proposals_path))
+        if excluded_proposals_path
+        else set()
+    )
+
+    proposals = filter_excluded_proposals(proposals, excluded_proposals)
 
     try:
         sanity_check_data(proposals, voteplan_proposals)
