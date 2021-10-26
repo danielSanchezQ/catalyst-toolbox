@@ -288,8 +288,6 @@ Result = namedtuple(
         "status",
         "fund_depletion",
         "not_funded_reason",
-        "ada_to_be_payed",
-        "lovelace_to_be_payed",
         "link_to_ideascale",
     ),
 )
@@ -299,7 +297,6 @@ def calc_results(
     proposals: Dict[str, Proposal],
     voteplan_proposals: Dict[str, ProposalStatus],
     fund: float,
-    conversion_factor: float,
     threshold: float,
 ) -> List[Result]:
     success_results = calc_vote_difference_and_threshold_success(
@@ -331,8 +328,6 @@ def calc_results(
         if funded:
             depletion -= proposal.proposal_funds
 
-        ada_to_be_payed = proposal.proposal_funds / conversion_factor if funded else 0
-
         result = Result(
             proposal_id=proposal_id,
             proposal=proposal.proposal_title,
@@ -345,8 +340,6 @@ def calc_results(
             status=FUNDED if funded else NOT_FUNDED,
             fund_depletion=depletion,
             not_funded_reason=not_funded_reason,
-            ada_to_be_payed=ada_to_be_payed,
-            lovelace_to_be_payed=ada_to_be_payed * LOVELACE_FACTOR,
             link_to_ideascale=proposal.proposal_url,
         )
 
@@ -407,11 +400,11 @@ class OutputFormat(enum.Enum):
 
 
 def calculate_rewards(
-    conversion_factor: float = typer.Option(...),
     output_file: str = typer.Option(...),
     approval_threshold: float = typer.Option(0.15),
     output_format: OutputFormat = typer.Option("csv"),
     proposals_path: Optional[str] = typer.Option(None),
+    excluded_proposals_path: Optional[str] = typer.Option(None),
     active_voteplan_path: Optional[str] = typer.Option(None),
     challenges_path: Optional[str] = typer.Option(None),
     vit_station_url: str = typer.Option("https://servicing-station.vit.iohk.io"),
@@ -454,7 +447,6 @@ def calculate_rewards(
             challenge_proposals,
             challenge_voteplan_proposals,
             challenge.rewards_total,
-            conversion_factor,
             approval_threshold,
         )
         out_stream = (
